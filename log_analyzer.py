@@ -222,7 +222,9 @@ def main():
         sys.exit(0)
 
     logging.info('Processing "{}"...'.format(latest_log.path))
-    raw_data = process_log(latest_log, config['MAX_ERRORS_PERCENT'])
+    raw_data = process_log(latest_log,
+                           (config['MAX_ERRORS_PERCENT']
+                            if 'MAX_ERRORS_PERCENT' in config else 10))
     if not raw_data:
         sys.exit(0)
     clean_data = process_raw(raw_data)
