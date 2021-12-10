@@ -1,0 +1,6 @@
+{
+    "REPORT_SIZE": 1200,
+    "REPORT_DIR": "./reports",
+    "LOG_DIR": "./log",
+    "MAX_ERRORS_PERCENT": 10
+}
