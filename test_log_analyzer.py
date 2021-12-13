@@ -112,8 +112,8 @@ class LogAnalyzerTestCase(unittest.TestCase):
         with open(self.test_dir + 'nginx-access-ui.log-20211207', 'w') as f:
             for item in test_data:
                 f.write(item + '\n')
-
-        self.assertEqual(la.process_log(self.testEntity, 1),
+        reader = la.log_reader(self.testEntity.path, self.testEntity.ext)
+        self.assertEqual(la.process_log(reader, 1),
                          self.test_raw_data)
 
     def test_process_log_when_max_errors_exceeded(self):
@@ -130,7 +130,8 @@ class LogAnalyzerTestCase(unittest.TestCase):
             for item in test_data:
                 f.write(item + '\n')
 
-        self.assertEqual(la.process_log(self.testEntity, 1),
+        reader = la.log_reader(self.testEntity.path, self.testEntity.ext)
+        self.assertEqual(la.process_log(reader, 1),
                          None)
 
     def test_process_raw(self):
@@ -144,7 +145,8 @@ class LogAnalyzerTestCase(unittest.TestCase):
                              'time_sum': 0.06,
                              'url': '/test'}]
 
-        self.assertEqual(la.process_raw(self.test_raw_data), excpected_output)
+        self.assertEqual(la.process_raw(self.test_raw_data, 1000),
+                         excpected_output)
 
 
 if __name__ == '__main__':

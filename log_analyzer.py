@@ -18,6 +18,13 @@ config = {
     "LOG_DIR": "./log"
 }
 
+LogFileEntry = namedtuple('LogFileEntry',
+                          {'path': '',
+                           'name': '',
+                           'ext': '',
+                           'date': ''
+                           })
+
 DEFAULT_CONFIG = './config.json'
 REPORT_TEMPLATE = './reports/report.html'
 
@@ -60,13 +67,6 @@ def load_config(path_to_config):
 def find_latest_log(log_dir):
     ''' Find latest log file '''
 
-    LogFileEntry = namedtuple('LogFileEntry',
-                              {'path': '',
-                               'name': '',
-                               'ext': '',
-                               'date': ''
-                               })
-
     logging.info('Searching latest log file in "{}"'.format(log_dir))
     pattern = re.compile(r'^nginx-access-ui\.log-(\d{8})(\.gz)?$')
     min_date = datetime.datetime.min.date()
@@ -75,8 +75,12 @@ def find_latest_log(log_dir):
     for file in os.listdir(log_dir):
         match = pattern.search(file)
         if match:
-            f_date = datetime.datetime.strptime(
-                match.group(1), '%Y%m%d').date()
+            try:
+                f_date = datetime.datetime.strptime(
+                    match.group(1), '%Y%m%d').date()
+            except ValueError as e:
+                logging.error('Error parsing file date {}: {}'.format(file, e))
+                continue
             f_ext = match.group(2)
             if f_date > min_date:
                 min_date = f_date
@@ -104,13 +108,10 @@ def is_report_exsist(report_dir, lastdate):
 
     report_name = 'report-{}.html'.format(lastdate.strftime('%Y.%m.%d'))
     report_path = os.path.join(report_dir, report_name)
-    if os.path.exists(report_path):
-        return True
-    else:
-        return False
+    return os.path.exists(report_path)
 
 
-def process_log(log_file_entry, max_errors_percent):
+def process_log(log_reader, max_errors_percent):
     '''Parse log file and return raw data for calculations'''
 
     time_regexp = r'\d+\.\d+$'
@@ -121,7 +122,7 @@ def process_log(log_file_entry, max_errors_percent):
     lines_count = 0
     lines_parsed = 0
 
-    for line in log_reader(log_file_entry.path, log_file_entry.ext):
+    for line in log_reader:
         url = (re.findall(url_regexp, line)[0]
                if re.findall(url_regexp, line) else None)
         time = (re.findall(time_regexp, line)[0]
@@ -152,7 +153,7 @@ def process_log(log_file_entry, max_errors_percent):
     return raw_data
 
 
-def process_raw(raw_data):
+def process_raw(raw_data, report_size):
     '''Process raw data and return stats table'''
 
     sum_time = sum([sum(i) for i in raw_data.values()])
@@ -176,18 +177,18 @@ def process_raw(raw_data):
         clean_data.append(line)
         processed += 1
 
-    return clean_data
+    return sorted(clean_data,
+                  key=lambda k: k['time_sum'],
+                  reverse=True)[:report_size]
 
 
-def create_report(clean_data, report_size, report_dir, report_date):
+def create_report(clean_data, report_dir, report_date):
     '''Create report from html template'''
 
     report_fname = '{}/report-{}.html'.format(report_dir,
                                               report_date.strftime('%Y.%m.%d'))
 
-    report_data = json.dumps(sorted(clean_data,
-                                    key=lambda k: k['time_sum'],
-                                    reverse=True)[:report_size])
+    report_data = json.dumps(clean_data)
 
     with open(REPORT_TEMPLATE, 'r') as template:
         template_data = Template(template.read())
@@ -222,14 +223,14 @@ def main():
         sys.exit(0)
 
     logging.info('Processing "{}"...'.format(latest_log.path))
-    raw_data = process_log(latest_log,
+    reader = log_reader(latest_log.path, latest_log.ext)
+    raw_data = process_log(reader,
                            (config['MAX_ERRORS_PERCENT']
                             if 'MAX_ERRORS_PERCENT' in config else 10))
     if not raw_data:
         sys.exit(0)
-    clean_data = process_raw(raw_data)
+    clean_data = process_raw(raw_data, config['REPORT_SIZE'])
     create_report(clean_data,
-                  config['REPORT_SIZE'],
                   config['REPORT_DIR'],
                   latest_log.date)
 
@@ -238,4 +239,4 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        logging.exception(str(e))
+        logging.exception(e)
